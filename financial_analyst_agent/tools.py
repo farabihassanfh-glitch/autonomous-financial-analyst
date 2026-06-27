@@ -55,6 +55,7 @@ def get_stock_history(ticker: str, period: str = "3y") -> Dict:
     """
     try:
         hist = yf.Ticker(ticker.upper()).history(period=period)
+        hist = hist.dropna(subset=["Close"])
         if hist.empty:
             return {"ticker": ticker.upper(), "status": "error",
                     "error": f"No history for {ticker} over {period}."}
