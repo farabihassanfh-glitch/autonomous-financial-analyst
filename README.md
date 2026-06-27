@@ -51,6 +51,22 @@ the `add_messages` reducer, and a checkpointer gives the agent memory per sessio
   crashing, so one failed source doesn't stop the analysis
 - **Per-session memory** via LangGraph checkpointing
 
+## Production guardrails
+
+Beyond the core agent, the project includes the kind of controls a regulated
+setting would demand — the part most agent demos skip:
+
+- **Citation verification** (`--verify`) — after the agent answers, a separate
+  "compliance reviewer" Claude pass audits every claim, confirming it is both
+  supported by a tool output and carries a source citation. Output gets a badge:
+  `✅ Citations verified — 12/12 claims sourced` or a list of flagged claims.
+- **Human-in-the-loop sign-off** (`--signoff`) — any actionable Buy/Sell call
+  pauses for a human analyst to approve or reject; the decision (approver +
+  timestamp) is written to an audit log.
+- **Backtesting** (`--score`) — every recommendation is logged, then scored
+  against the actual forward stock return from yfinance, producing a directional
+  accuracy metric over time.
+
 ## Tech stack
 
 Claude (Anthropic) · LangGraph · LangChain · yfinance · Tavily · ChromaDB ·
@@ -77,6 +93,12 @@ python main.py --verbose "Compare Microsoft and Google as AI investments"
 
 # Enable RAG over your own analyst PDFs (drop them in data/reports/ first)
 python main.py --rag "What are Microsoft's AI initiatives, and how is the stock doing?"
+
+# Production guardrails: verify citations + require human sign-off on Buy/Sell
+python main.py --verify --signoff --ticker AMD "Should I buy AMD?"
+
+# Backtest logged recommendations against actual returns
+python main.py --score
 ```
 
 Or use it as a library:

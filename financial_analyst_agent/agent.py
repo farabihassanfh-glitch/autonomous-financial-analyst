@@ -80,9 +80,35 @@ def build_agent(with_rag: bool = False, with_memory: bool = True):
     return workflow.compile(checkpointer=checkpointer)
 
 
-def run_query(query: str, with_rag: bool = False, thread_id: str = "session-1") -> str:
-    """Convenience helper: run one query end-to-end and return the final answer."""
+def analyze(query: str, with_rag: bool = False, thread_id: str = "session-1") -> dict:
+    """Run one query end-to-end and return the answer plus execution detail.
+
+    Returns a dict with:
+        answer        — the final briefing text
+        tool_calls    — list of {"name", "args"} the agent invoked
+        tool_outputs  — list of raw tool-result strings (for verification/audit)
+        messages      — the full LangGraph message list
+    """
     agent = build_agent(with_rag=with_rag, with_memory=True)
     config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 25}
     result = agent.invoke({"messages": [HumanMessage(content=query)]}, config=config)
-    return result["messages"][-1].content
+    messages = result["messages"]
+
+    tool_calls, tool_outputs = [], []
+    for m in messages:
+        for tc in getattr(m, "tool_calls", None) or []:
+            tool_calls.append({"name": tc["name"], "args": tc["args"]})
+        if m.__class__.__name__ == "ToolMessage":
+            tool_outputs.append(str(m.content))
+
+    return {
+        "answer": messages[-1].content,
+        "tool_calls": tool_calls,
+        "tool_outputs": tool_outputs,
+        "messages": messages,
+    }
+
+
+def run_query(query: str, with_rag: bool = False, thread_id: str = "session-1") -> str:
+    """Convenience helper: run one query and return just the final answer text."""
+    return analyze(query, with_rag=with_rag, thread_id=thread_id)["answer"]

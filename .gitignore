@@ -19,6 +19,10 @@ chroma_db/
 *.chroma
 data/reports/*.pdf
 
+# Runtime logs (recommendations, audit trail)
+data/recommendations.jsonl
+data/signoff_audit.jsonl
+
 # OS / editor
 .DS_Store
 Thumbs.db
