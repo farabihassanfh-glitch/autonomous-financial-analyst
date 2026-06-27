@@ -1,0 +1,198 @@
+"""Streamlit web UI for the Autonomous Financial Research Analyst.
+
+Run locally:   streamlit run app_streamlit.py
+Then open:     http://localhost:8501
+
+Optional: set APP_PASSWORD in the environment to gate the app before anyone can
+run a (paid) query — useful for a public Railway deployment.
+"""
+
+from __future__ import annotations
+
+import os
+
+import streamlit as st
+
+from financial_analyst_agent.agent import analyze
+from financial_analyst_agent.approval import record_decision, requires_signoff
+from financial_analyst_agent.backtest import (
+    extract_recommendation,
+    log_recommendation,
+    score_recommendations,
+)
+from financial_analyst_agent.config import CHAT_MODEL
+from financial_analyst_agent.verify import verify_citations
+
+st.set_page_config(page_title="Autonomous Financial Analyst", page_icon="📈",
+                   layout="wide")
+
+
+# --------------------------------------------------------------------------- #
+# Optional password gate (set APP_PASSWORD to enable)
+# --------------------------------------------------------------------------- #
+def check_password() -> bool:
+    expected = os.getenv("APP_PASSWORD")
+    if not expected:
+        return True  # no gate configured
+    if st.session_state.get("authed"):
+        return True
+    st.title("📈 Autonomous Financial Analyst")
+    pw = st.text_input("Enter access password", type="password")
+    if pw and pw == expected:
+        st.session_state["authed"] = True
+        st.rerun()
+    elif pw:
+        st.error("Incorrect password.")
+    return False
+
+
+if not check_password():
+    st.stop()
+
+
+# --------------------------------------------------------------------------- #
+# Sidebar
+# --------------------------------------------------------------------------- #
+with st.sidebar:
+    st.header("⚙️ Settings")
+    st.caption(f"Model: `{CHAT_MODEL}`")
+    use_verify = st.toggle("Citation verification", value=True,
+                           help="Audit every claim for a cited tool source.")
+    use_rag = st.toggle("Private RAG (PDFs in data/reports/)", value=False,
+                        help="Retrieve from your private analyst PDFs.")
+    require_signoff = st.toggle("Require Buy/Sell sign-off", value=True,
+                                help="Pause for human approval on actionable calls.")
+    ticker_hint = st.text_input("Ticker (for logging)", value="",
+                                placeholder="e.g. NVDA").strip().upper() or None
+    st.divider()
+    st.caption("Not financial advice. Educational portfolio project.")
+
+
+st.title("📈 Autonomous Financial Research Analyst")
+st.caption("A goal-oriented agent (Claude + LangGraph) that researches a company "
+           "end-to-end — price, history, news, and private documents — with "
+           "citation guardrails and human sign-off.")
+
+tab_analyze, tab_backtest = st.tabs(["🔍 Analyze", "📊 Backtest"])
+
+
+# --------------------------------------------------------------------------- #
+# Analyze tab
+# --------------------------------------------------------------------------- #
+with tab_analyze:
+    examples = {
+        "Analyze NVIDIA": "Analyze NVIDIA stock and tell me if it's a good investment.",
+        "Compare MSFT vs GOOGL": "Compare Microsoft and Google as AI investments.",
+        "Risks in Tesla": "What are the key risks of investing in Tesla right now?",
+        "Should I buy AMD?": "Should I buy AMD? Give a Buy/Hold/Sell with confidence %.",
+    }
+    cols = st.columns(len(examples))
+    for col, (label, q) in zip(cols, examples.items()):
+        if col.button(label, use_container_width=True):
+            st.session_state["query"] = q
+
+    query = st.text_area("Your research question",
+                         value=st.session_state.get("query", ""),
+                         height=90, placeholder="e.g. Analyze NVIDIA stock...")
+
+    if st.button("Run analysis", type="primary", disabled=not query.strip()):
+        with st.spinner("Agent is researching — calling tools and synthesizing..."):
+            result = analyze(query, with_rag=use_rag)
+        rec = extract_recommendation(result["answer"], ticker_hint=ticker_hint)
+        verification = (verify_citations(result["answer"], result["tool_outputs"])
+                        if use_verify else None)
+        if rec["action"] != "UNKNOWN" and rec["ticker"]:
+            log_recommendation(rec["ticker"], rec["action"], query,
+                               rec["confidence_pct"])
+        # persist across reruns (so Approve/Reject buttons work)
+        st.session_state["result"] = result
+        st.session_state["rec"] = rec
+        st.session_state["verification"] = verification
+        st.session_state.pop("signoff", None)
+
+    # render last result (survives button reruns)
+    if "result" in st.session_state:
+        result = st.session_state["result"]
+        rec = st.session_state["rec"]
+        verification = st.session_state.get("verification")
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Recommendation", rec["action"])
+        m2.metric("Confidence",
+                  f"{rec['confidence_pct']}%" if rec["confidence_pct"] else "—")
+        m3.metric("Tool calls", len(result["tool_calls"]))
+        if verification and verification.get("status") != "error":
+            m4.metric("Claims sourced",
+                      f"{verification['sourced_claims']}/{verification['total_claims']}")
+        else:
+            m4.metric("Claims sourced", "—")
+
+        if verification:
+            if verification.get("status") == "pass":
+                st.success(f"✅ Citations verified — "
+                           f"{verification['sourced_claims']}/"
+                           f"{verification['total_claims']} claims sourced")
+            elif verification.get("status") == "error":
+                st.warning(f"Verification failed: {verification.get('error')}")
+            else:
+                st.warning(f"⚠️ {verification['sourced_claims']}/"
+                           f"{verification['total_claims']} claims sourced — "
+                           f"{len(verification['issues'])} flagged")
+                for issue in verification["issues"]:
+                    st.write(f"- {issue}")
+
+        st.markdown(result["answer"])
+
+        with st.expander("🔧 Tools the agent called"):
+            for tc in result["tool_calls"]:
+                st.write(f"- `{tc['name']}` {tc['args']}")
+
+        # Human-in-the-loop sign-off
+        if require_signoff and requires_signoff(result["answer"]):
+            st.divider()
+            st.subheader("⚖️ Human sign-off required")
+            st.caption(f"Actionable call detected: **{rec['action']} "
+                       f"{rec['ticker'] or '?'}** — approve before finalizing.")
+            if "signoff" in st.session_state:
+                d = st.session_state["signoff"]
+                (st.success if d["decision"] == "APPROVED" else st.error)(
+                    f"{d['decision']} by {d['approver']} at {d['timestamp']}")
+            else:
+                approver = st.text_input("Approver name", value="")
+                c1, c2 = st.columns(2)
+                if c1.button("✅ Approve", use_container_width=True):
+                    st.session_state["signoff"] = record_decision(
+                        rec["ticker"] or "?", rec["action"], True,
+                        approver or "anonymous")
+                    st.rerun()
+                if c2.button("⛔ Reject", use_container_width=True):
+                    st.session_state["signoff"] = record_decision(
+                        rec["ticker"] or "?", rec["action"], False,
+                        approver or "anonymous", note="rejected via web UI")
+                    st.rerun()
+
+
+# --------------------------------------------------------------------------- #
+# Backtest tab
+# --------------------------------------------------------------------------- #
+with tab_backtest:
+    st.caption("Score logged recommendations against actual forward stock returns.")
+    horizon = st.slider("Forward horizon (trading days)", 5, 90, 30, step=5)
+    if st.button("Run backtest"):
+        r = score_recommendations(horizon_days=horizon)
+        if r["status"] != "ok":
+            st.info(r.get("message", "No recommendations logged yet — run some analyses first."))
+        else:
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Directional accuracy",
+                      f"{r['accuracy_pct']}%" if r["accuracy_pct"] is not None else "—")
+            c2.metric("Evaluated", r["evaluated"])
+            c3.metric("Pending (too recent)", r["pending"])
+            if r["details"]:
+                st.dataframe(
+                    [{"ticker": d["ticker"], "action": d["action"],
+                      "forward_return_%": d["forward_return_pct"],
+                      "correct": "✅" if d["correct"] else "❌"}
+                     for d in r["details"]],
+                    use_container_width=True,
+                )
