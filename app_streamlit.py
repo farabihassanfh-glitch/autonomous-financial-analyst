@@ -73,7 +73,8 @@ st.caption("A goal-oriented agent (Claude + LangGraph) that researches a company
            "end-to-end — price, history, news, and private documents — with "
            "citation guardrails and human sign-off.")
 
-tab_analyze, tab_backtest = st.tabs(["🔍 Analyze", "📊 Backtest"])
+tab_analyze, tab_backtest, tab_about = st.tabs(
+    ["🔍 Analyze", "📊 Backtest", "ℹ️ About & FAQ"])
 
 
 # --------------------------------------------------------------------------- #
@@ -196,3 +197,72 @@ with tab_backtest:
                      for d in r["details"]],
                     use_container_width=True,
                 )
+
+
+# --------------------------------------------------------------------------- #
+# About & FAQ tab
+# --------------------------------------------------------------------------- #
+with tab_about:
+    st.subheader("What is this?")
+    st.markdown(
+        "An **autonomous AI research agent** that investigates a public company "
+        "end-to-end and produces an evidence-backed investment briefing. You ask "
+        "one question (\"Analyze NVIDIA\"); the agent decides on its own which "
+        "tools to call — live price, multi-year history, recent news, and private "
+        "documents — then synthesizes a recommendation with cited sources.\n\n"
+        "It's built with **Claude** (Anthropic) for reasoning and **LangGraph** "
+        "for the agent loop. This is a portfolio project — *not financial advice*."
+    )
+
+    st.subheader("How it works")
+    st.markdown(
+        "1. **You** ask a research question.\n"
+        "2. **Claude** plans and calls tools as needed (it isn't told the steps).\n"
+        "3. **Tools** fetch data: `get_stock_price`, `get_stock_history`, "
+        "`search_financial_news`, and `query_private_database` (RAG over PDFs).\n"
+        "4. The agent **loops** — tool results feed back in — until it has enough "
+        "to write the briefing.\n"
+        "5. **Guardrails** run: a citation check audits every claim, and any "
+        "Buy/Sell call pauses for human sign-off."
+    )
+
+    st.subheader("The difference: agent vs. chatbot")
+    st.markdown(
+        "A chatbot answers the literal question. An **agent pursues a goal** — "
+        "given \"analyze NVIDIA,\" it independently gathers price, trend, news, and "
+        "research before recommending, looping through tools until done."
+    )
+
+    st.subheader("FAQ")
+    with st.expander("Is this financial advice?"):
+        st.write("No. It's an educational/portfolio demonstration of agentic AI. "
+                 "Do not make investment decisions based on it.")
+    with st.expander("Where does the data come from?"):
+        st.write("Live prices and history from Yahoo Finance (`yfinance`), recent "
+                 "news from the Tavily search API, and — when Private RAG is on — "
+                 "your own PDF documents in `data/reports/`.")
+    with st.expander("What does 'Claims sourced' mean?"):
+        st.write("After the agent answers, a separate Claude 'compliance reviewer' "
+                 "audits every factual claim to confirm it's backed by a tool "
+                 "output and carries a citation. The badge shows how many passed — "
+                 "a guardrail against hallucinated numbers.")
+    with st.expander("Why does it sometimes ask for sign-off?"):
+        st.write("In a regulated setting, an actionable Buy/Sell shouldn't ship "
+                 "without a human analyst's approval. When the agent makes such a "
+                 "call, it pauses for Approve/Reject and logs the decision with an "
+                 "approver and timestamp for audit.")
+    with st.expander("What is the Backtest tab?"):
+        st.write("Every recommendation is logged, then scored against the actual "
+                 "forward stock return to measure the agent's directional accuracy "
+                 "over time — a real evaluation metric, not just a demo.")
+    with st.expander("What is Private RAG?"):
+        st.write("Retrieval-Augmented Generation. Drop PDFs into `data/reports/`, "
+                 "toggle it on, and the agent can answer from and cite those "
+                 "private documents instead of relying on public knowledge.")
+    with st.expander("Does it cost money to run?"):
+        st.write("Each analysis makes a few Claude API calls (a few cents). The "
+                 "embedding model used for RAG runs locally and is free.")
+
+    st.divider()
+    st.caption("Built by Syed Farabi Hassan · Claude + LangGraph · MIT licensed. "
+               "Not financial advice.")
