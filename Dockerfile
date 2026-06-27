@@ -6,9 +6,9 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Install slim deps first for better layer caching.
-COPY requirements-deploy.txt .
-RUN pip install --no-cache-dir -r requirements-deploy.txt
+# Install core deps first for better layer caching (RAG extras omitted on purpose).
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # App code.
 COPY financial_analyst_agent/ ./financial_analyst_agent/

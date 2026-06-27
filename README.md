@@ -78,8 +78,9 @@ sentence-transformers
 git clone <your-repo-url>
 cd autonomous-financial-analyst
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env                                    # then add your ANTHROPIC_API_KEY
+pip install -r requirements.txt                         # core agent + web UI
+pip install -r requirements-rag.txt                     # optional: enables Private RAG (heavy)
+cp .env.example .env                                     # then add your ANTHROPIC_API_KEY
 ```
 
 ## Usage
@@ -120,25 +121,33 @@ financial_analyst_agent/
 main.py           # CLI entry point
 ```
 
-## Deploy (Railway)
+## Deploy
 
-The repo ships a `Dockerfile`, `railway.json`, and a slim `requirements-deploy.txt`
-(core agent only — no torch/RAG, so the image is small and cheap). RAG remains a
-local-only feature and its toggle auto-disables when those deps aren't present.
+The core `requirements.txt` is intentionally slim (no torch/RAG) so the deployed
+app builds small and cheap. RAG stays local-only; its toggle auto-disables when
+those deps aren't present.
+
+### Streamlit Community Cloud (free, recommended)
 
 1. Push this repo to GitHub.
-2. On [railway.app](https://railway.app): **New Project → Deploy from GitHub repo**
-   and pick this repo. Railway builds from the `Dockerfile`.
-3. Add **Variables**:
-   - `ANTHROPIC_API_KEY` — required
-   - `TAVILY_API_KEY` — optional (enables news)
-   - `APP_PASSWORD` — recommended; gates the app so only people you share the
-     password with can run (paid) queries
-4. Railway gives you a public `https://<name>.up.railway.app` URL.
+2. Go to [share.streamlit.io](https://share.streamlit.io) → sign in with GitHub →
+   **New app** → pick this repo, branch `main`, main file `app_streamlit.py`.
+3. In **Advanced settings → Secrets**, add (TOML format):
+   ```toml
+   ANTHROPIC_API_KEY = "sk-ant-..."
+   TAVILY_API_KEY = "tvly-..."   # optional, enables news
+   APP_PASSWORD = "choose-a-password"
+   ```
+4. Deploy → you get a public `https://<name>.streamlit.app` URL.
 
-**Before going public:** set a monthly spend cap on a dedicated Anthropic
-workspace (console.anthropic.com) and use a key from that workspace — that way
-the blast radius of the public demo is capped no matter what.
+### Railway (alternative; Hobby plan ~$5/mo)
+
+Ships a `Dockerfile` + `railway.json`. New Project → Deploy from GitHub repo →
+add the same three variables under **Variables** → Generate Domain.
+
+**Before going public:** put a small monthly spend cap (or a small prepaid-credit
+balance with auto-reload off) on your Anthropic account so the demo's cost is
+bounded, and set `APP_PASSWORD` so only people you share it with can run queries.
 
 ## Notes
 

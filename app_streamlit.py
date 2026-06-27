@@ -14,6 +14,16 @@ import os
 
 import streamlit as st
 
+# On Streamlit Community Cloud, secrets are provided via st.secrets. Bridge them
+# into environment variables so the (framework-agnostic) config layer picks them
+# up the same way it reads a local .env file.
+try:
+    for _k, _v in st.secrets.items():
+        if isinstance(_v, str):
+            os.environ.setdefault(_k, _v)
+except Exception:
+    pass  # no secrets file (e.g. local dev with .env) — fine
+
 # RAG needs heavy optional deps (torch, chromadb). Detect whether they're
 # installed so the public/slim deployment can disable the toggle gracefully.
 RAG_AVAILABLE = importlib.util.find_spec("langchain_chroma") is not None

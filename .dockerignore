@@ -10,6 +10,6 @@ data/
 chroma_db/
 *.md
 !README.md
-requirements.txt
+requirements-rag.txt
 .pytest_cache/
 .ipynb_checkpoints/
