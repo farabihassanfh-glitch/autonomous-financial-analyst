@@ -69,9 +69,9 @@ with st.sidebar:
 
 
 st.title("📈 Autonomous Financial Research Analyst")
-st.caption("A goal-oriented agent (Claude + LangGraph) that researches a company "
-           "end-to-end — price, history, news, and private documents — with "
-           "citation guardrails and human sign-off.")
+st.caption("A goal-oriented agent (Claude + LangGraph) that researches any ticker "
+           "— stocks, ETFs, indices, crypto — end-to-end across price, history, "
+           "news, and private documents, with citation guardrails and human sign-off.")
 
 tab_analyze, tab_backtest, tab_about = st.tabs(
     ["🔍 Analyze", "📊 Backtest", "ℹ️ About & FAQ"])
@@ -205,11 +205,13 @@ with tab_backtest:
 with tab_about:
     st.subheader("What is this?")
     st.markdown(
-        "An **autonomous AI research agent** that investigates a public company "
-        "end-to-end and produces an evidence-backed investment briefing. You ask "
-        "one question (\"Analyze NVIDIA\"); the agent decides on its own which "
-        "tools to call — live price, multi-year history, recent news, and private "
-        "documents — then synthesizes a recommendation with cited sources.\n\n"
+        "An **autonomous AI research agent** that investigates a tradable asset "
+        "end-to-end and produces an evidence-backed investment briefing. It works "
+        "for **any Yahoo Finance ticker** — stocks, ETFs (e.g. IBIT, SPY), indices "
+        "(^GSPC), and crypto (BTC-USD). You ask one question (\"Analyze IBIT\"); the "
+        "agent decides on its own which tools to call — live price, multi-year "
+        "history, recent news, and private documents — then synthesizes a "
+        "recommendation with cited sources.\n\n"
         "It's built with **Claude** (Anthropic) for reasoning and **LangGraph** "
         "for the agent loop. This is a portfolio project — *not financial advice*."
     )
@@ -234,6 +236,12 @@ with tab_about:
     )
 
     st.subheader("FAQ")
+    with st.expander("What can it research?"):
+        st.write("Any ticker Yahoo Finance recognizes — individual stocks, ETFs "
+                 "(IBIT, SPY, QQQ), market indices (^GSPC, ^IXIC), and crypto "
+                 "pairs (BTC-USD, ETH-USD). The market tools (price, history, "
+                 "news) work for all of them. Private RAG is most useful when your "
+                 "PDFs actually cover the asset you're asking about.")
     with st.expander("Is this financial advice?"):
         st.write("No. It's an educational/portfolio demonstration of agentic AI. "
                  "Do not make investment decisions based on it.")
