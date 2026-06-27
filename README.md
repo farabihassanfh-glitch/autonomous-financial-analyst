@@ -120,6 +120,26 @@ financial_analyst_agent/
 main.py           # CLI entry point
 ```
 
+## Deploy (Railway)
+
+The repo ships a `Dockerfile`, `railway.json`, and a slim `requirements-deploy.txt`
+(core agent only — no torch/RAG, so the image is small and cheap). RAG remains a
+local-only feature and its toggle auto-disables when those deps aren't present.
+
+1. Push this repo to GitHub.
+2. On [railway.app](https://railway.app): **New Project → Deploy from GitHub repo**
+   and pick this repo. Railway builds from the `Dockerfile`.
+3. Add **Variables**:
+   - `ANTHROPIC_API_KEY` — required
+   - `TAVILY_API_KEY` — optional (enables news)
+   - `APP_PASSWORD` — recommended; gates the app so only people you share the
+     password with can run (paid) queries
+4. Railway gives you a public `https://<name>.up.railway.app` URL.
+
+**Before going public:** set a monthly spend cap on a dedicated Anthropic
+workspace (console.anthropic.com) and use a key from that workspace — that way
+the blast radius of the public demo is capped no matter what.
+
 ## Notes
 
 - Defaults to `claude-opus-4-8`; set `ANTHROPIC_MODEL=claude-sonnet-4-6` in `.env`

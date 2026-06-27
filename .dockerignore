@@ -1,0 +1,15 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.env
+.env.*
+data/
+chroma_db/
+*.md
+!README.md
+requirements.txt
+.pytest_cache/
+.ipynb_checkpoints/

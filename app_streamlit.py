@@ -9,9 +9,14 @@ run a (paid) query — useful for a public Railway deployment.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 
 import streamlit as st
+
+# RAG needs heavy optional deps (torch, chromadb). Detect whether they're
+# installed so the public/slim deployment can disable the toggle gracefully.
+RAG_AVAILABLE = importlib.util.find_spec("langchain_chroma") is not None
 
 from financial_analyst_agent.agent import analyze
 from financial_analyst_agent.approval import record_decision, requires_signoff
@@ -59,7 +64,12 @@ with st.sidebar:
     use_verify = st.toggle("Citation verification", value=True,
                            help="Audit every claim for a cited tool source.")
     use_rag = st.toggle("Private RAG (PDFs in data/reports/)", value=False,
-                        help="Retrieve from your private analyst PDFs.")
+                        disabled=not RAG_AVAILABLE,
+                        help="Retrieve from your private analyst PDFs."
+                        if RAG_AVAILABLE
+                        else "RAG deps not installed in this deployment — "
+                             "available when running locally with the full "
+                             "requirements.txt.")
     require_signoff = st.toggle("Require Buy/Sell sign-off", value=True,
                                 help="Pause for human approval on actionable calls.")
     ticker_hint = st.text_input("Ticker (for logging)", value="",

@@ -1,0 +1,13 @@
+# Slim dependency set for public deployment (Railway).
+# Excludes the heavy RAG stack (torch, chromadb, sentence-transformers) so the
+# image stays small and cheap. RAG is a local-only feature; see requirements.txt
+# for the full set.
+langchain>=0.3.27
+langchain-core>=0.3.79
+langchain-anthropic>=0.3.0
+langchain-community>=0.3.31
+langgraph>=0.3.7
+yfinance>=0.2.66
+tavily-python>=0.5.0
+python-dotenv>=1.0.0
+streamlit>=1.40.0
