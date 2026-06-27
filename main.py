@@ -16,6 +16,12 @@ from financial_analyst_agent.config import CHAT_MODEL
 
 
 def main() -> int:
+    # Ensure UTF-8 output so Claude's em-dashes/symbols print on Windows consoles.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
     parser = argparse.ArgumentParser(description="Autonomous Financial Research Analyst")
     parser.add_argument("query", help="The research question to answer")
     parser.add_argument("--rag", action="store_true",
