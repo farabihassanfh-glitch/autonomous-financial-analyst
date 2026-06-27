@@ -17,7 +17,9 @@ env/
 # RAG / data artifacts
 chroma_db/
 *.chroma
-data/reports/*.pdf
+data/reports/**/*.pdf
+data/reports/**/
+!data/reports/README.md
 
 # Runtime logs (recommendations, audit trail)
 data/recommendations.jsonl
