@@ -18,17 +18,28 @@ import yfinance as yf
 LOG_PATH = "data/recommendations.jsonl"
 
 _ACTION_RE = re.compile(r"\b(STRONG BUY|BUY|HOLD|SELL|STRONG SELL)\b", re.IGNORECASE)
-_CONF_RE = re.compile(r"confidence[^0-9]{0,15}(\d{1,3})\s*%", re.IGNORECASE)
-_TICKER_RE = re.compile(r"\b([A-Z]{1,5})\b")
+# Numeric confidence: "confidence" followed (within a sentence) by NN%.
+_CONF_PCT_RE = re.compile(r"confidence[^0-9%]{0,40}?(\d{1,3})\s*%", re.IGNORECASE)
+# Qualitative confidence: "confidence ... High/Medium/Moderate/Low".
+_CONF_LABEL_RE = re.compile(
+    r"confidence[^A-Za-z]{0,20}(very high|high|medium|moderate|low|very low)",
+    re.IGNORECASE,
+)
 
 
 def extract_recommendation(answer: str, ticker_hint: str | None = None) -> dict:
-    """Parse the action (Buy/Hold/Sell) and confidence from a briefing."""
+    """Parse the action (Buy/Hold/Sell) and confidence from a briefing.
+
+    confidence_pct is the numeric percent if the briefing gave one; confidence_label
+    is a word like "Low"/"Moderate" when it gave a qualitative level instead.
+    """
     action_match = _ACTION_RE.search(answer)
-    conf_match = _CONF_RE.search(answer)
+    pct_match = _CONF_PCT_RE.search(answer)
+    label_match = _CONF_LABEL_RE.search(answer)
     return {
         "action": action_match.group(1).upper() if action_match else "UNKNOWN",
-        "confidence_pct": int(conf_match.group(1)) if conf_match else None,
+        "confidence_pct": int(pct_match.group(1)) if pct_match else None,
+        "confidence_label": label_match.group(1).title() if label_match else None,
         "ticker": ticker_hint,
     }
 

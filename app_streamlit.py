@@ -139,8 +139,9 @@ with tab_analyze:
 
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Recommendation", rec["action"])
-        m2.metric("Confidence",
-                  f"{rec['confidence_pct']}%" if rec["confidence_pct"] else "—")
+        conf_display = (f"{rec['confidence_pct']}%" if rec.get("confidence_pct")
+                        else rec.get("confidence_label") or "—")
+        m2.metric("Confidence", conf_display)
         m3.metric("Tool calls", len(result["tool_calls"]))
         if verification and verification.get("status") != "error":
             m4.metric("Claims sourced",
