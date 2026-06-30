@@ -7,10 +7,49 @@ unsourced assertions and hallucinated figures before a briefing is trusted.
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 
 from .config import get_chat_model
+
+
+def extract_data_caveats(tool_outputs: list[str]) -> list[str]:
+    """Pull any data-quality warnings/errors the tools reported.
+
+    Tools self-report limitations (e.g. a recent IPO's short history, a missing
+    news key, null fields). This surfaces those to the user so a weak data input
+    is never silently trusted — the systemic guard against "garbage in" answers.
+    """
+    caveats: list[str] = []
+    for out in tool_outputs:
+        data = None
+        for parser in (json.loads, ast.literal_eval):
+            try:
+                data = parser(out)
+                break
+            except Exception:  # noqa: BLE001
+                continue
+        if isinstance(data, dict):
+            if data.get("warning"):
+                caveats.append(str(data["warning"]))
+            if data.get("status") == "error" and data.get("error"):
+                caveats.append(f"Tool error: {data['error']}")
+        elif isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict) and item.get("status") == "error":
+                    caveats.append(f"Tool error: {item.get('error')}")
+        else:  # unparseable string — regex fallback for the key signals
+            m = re.search(r"LIMITED HISTORY[^\"'}]*", out)
+            if m:
+                caveats.append(m.group(0).strip())
+
+    seen, unique = set(), []
+    for c in caveats:
+        if c not in seen:
+            seen.add(c)
+            unique.append(c)
+    return unique
 
 _REVIEWER_PROMPT = """You are a compliance reviewer auditing a financial briefing.
 

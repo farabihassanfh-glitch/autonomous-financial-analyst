@@ -36,7 +36,7 @@ from financial_analyst_agent.backtest import (
     score_recommendations,
 )
 from financial_analyst_agent.config import CHAT_MODEL
-from financial_analyst_agent.verify import verify_citations
+from financial_analyst_agent.verify import extract_data_caveats, verify_citations
 
 st.set_page_config(page_title="Autonomous Financial Analyst", page_icon="📈",
                    layout="wide")
@@ -112,6 +112,9 @@ with tab_analyze:
         if col.button(label, use_container_width=True):
             st.session_state["query"] = q
 
+    st.warning("⚠️ **Not financial advice.** This is an AI research demo. It can be "
+               "wrong or work from incomplete data — verify everything before acting.")
+
     query = st.text_area("Your research question",
                          value=st.session_state.get("query", ""),
                          height=90, placeholder="e.g. Analyze NVIDIA stock...")
@@ -148,6 +151,11 @@ with tab_analyze:
                       f"{verification['sourced_claims']}/{verification['total_claims']}")
         else:
             m4.metric("Claims sourced", "—")
+
+        caveats = extract_data_caveats(result["tool_outputs"])
+        if caveats:
+            st.warning("**Data caveats the agent worked with** (weak inputs the "
+                       "tools flagged):\n" + "\n".join(f"- {c}" for c in caveats))
 
         if verification:
             if verification.get("status") == "pass":

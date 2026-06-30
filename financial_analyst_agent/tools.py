@@ -86,7 +86,7 @@ def get_stock_history(ticker: str, period: str = "3y") -> Dict:
         if span_days < 200:
             result["warning"] = (
                 f"LIMITED HISTORY: only {len(hist)} trading days "
-                f"(~{span_days} days) available — likely a recent IPO or new "
+                f"(~{span_days} days) available, likely a recent IPO or new "
                 f"listing. Do NOT treat this as long-term performance; judge it as "
                 f"a newly listed security with a short track record."
             )
