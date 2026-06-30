@@ -60,20 +60,37 @@ def get_stock_history(ticker: str, period: str = "3y") -> Dict:
             return {"ticker": ticker.upper(), "status": "error",
                     "error": f"No history for {ticker} over {period}."}
         start, end = hist["Close"].iloc[0], hist["Close"].iloc[-1]
-        return {
+        # Actual span available may be far shorter than requested (e.g. a recent
+        # IPO). Report the true span and warn so the agent doesn't read a few days
+        # of data as if it were a multi-year track record.
+        span_days = (hist.index[-1] - hist.index[0]).days
+        approx_years = round(span_days / 365.25, 2)
+        result = {
             "ticker": ticker.upper(),
-            "period": period,
+            "requested_period": period,
+            "actual_span_days": span_days,
+            "actual_span_years": approx_years,
             "start_date": hist.index[0].strftime("%Y-%m-%d"),
             "end_date": hist.index[-1].strftime("%Y-%m-%d"),
             "start_price": round(start, 2),
             "end_price": round(end, 2),
             "return_pct": round((end - start) / start * 100, 2),
+            "return_note": f"Return is over the actual {span_days} days available, "
+                           f"not the requested {period}.",
             "high": round(hist["High"].max(), 2),
             "low": round(hist["Low"].min(), 2),
             "avg_volume": int(hist["Volume"].mean()),
             "data_points": len(hist),
             "status": "success",
         }
+        if span_days < 200:
+            result["warning"] = (
+                f"LIMITED HISTORY: only {len(hist)} trading days "
+                f"(~{span_days} days) available — likely a recent IPO or new "
+                f"listing. Do NOT treat this as long-term performance; judge it as "
+                f"a newly listed security with a short track record."
+            )
+        return result
     except Exception as e:  # noqa: BLE001
         return {"ticker": ticker.upper(), "status": "error", "error": str(e)}
 
