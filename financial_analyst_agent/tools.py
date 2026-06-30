@@ -8,11 +8,20 @@ when a single data source is unavailable.
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime
 from typing import Dict, List
 
 import yfinance as yf
 from langchain_core.tools import tool
+
+# Leveraged/inverse funds (2x/3x daily, "Inverse", "Bull"/"Bear", "Daily Target")
+# decay over time by design and are short-term trading instruments, not
+# buy-and-hold positions. A standard Buy/Hold/Sell framing doesn't apply to them.
+_LEVERAGED_RE = re.compile(
+    r"\b(\d(\.\d)?x|ultra|inverse|bear|bull|daily target|2x|3x)\b", re.IGNORECASE
+)
+LOW_LIQUIDITY_AVG_VOLUME = 100_000  # shares/day below which pricing is unreliable
 
 
 @tool
@@ -31,10 +40,11 @@ def get_stock_price(ticker: str) -> Dict:
         if price is None:
             return {"ticker": ticker.upper(), "status": "error",
                     "error": f"No price data for {ticker}; ticker may be invalid."}
-        return {
+        name = info.get("longName", info.get("shortName", ""))
+        result = {
             "ticker": ticker.upper(),
-            "company_name": info.get("longName", info.get("shortName")),
-            "current_price": round(price, 2),
+            "company_name": name,
+            "current_price": round(float(price), 2),
             "currency": info.get("currency", "USD"),
             "day_high": info.get("dayHigh", info.get("regularMarketDayHigh")),
             "day_low": info.get("dayLow", info.get("regularMarketDayLow")),
@@ -43,6 +53,14 @@ def get_stock_price(ticker: str) -> Dict:
             "timestamp": datetime.now().isoformat(timespec="seconds"),
             "status": "success",
         }
+        if name and _LEVERAGED_RE.search(name):
+            result["product_type_warning"] = (
+                f"LEVERAGED/INVERSE PRODUCT: '{name}' appears to be a leveraged, "
+                f"inverse, or daily-reset fund. These decay over time by design and "
+                f"are short-term trading instruments, not buy-and-hold positions. "
+                f"A standard long-term Buy/Hold/Sell recommendation does not apply."
+            )
+        return result
     except Exception as e:  # noqa: BLE001 - tools must fail soft for the agent
         return {"ticker": ticker.upper(), "status": "error", "error": str(e)}
 
@@ -72,13 +90,13 @@ def get_stock_history(ticker: str, period: str = "3y") -> Dict:
             "actual_span_years": approx_years,
             "start_date": hist.index[0].strftime("%Y-%m-%d"),
             "end_date": hist.index[-1].strftime("%Y-%m-%d"),
-            "start_price": round(start, 2),
-            "end_price": round(end, 2),
-            "return_pct": round((end - start) / start * 100, 2),
+            "start_price": round(float(start), 2),
+            "end_price": round(float(end), 2),
+            "return_pct": round(float((end - start) / start * 100), 2),
             "return_note": f"Return is over the actual {span_days} days available, "
                            f"not the requested {period}.",
-            "high": round(hist["High"].max(), 2),
-            "low": round(hist["Low"].min(), 2),
+            "high": round(float(hist["High"].max()), 2),
+            "low": round(float(hist["Low"].min()), 2),
             "avg_volume": int(hist["Volume"].mean()),
             "data_points": len(hist),
             "status": "success",
@@ -89,6 +107,12 @@ def get_stock_history(ticker: str, period: str = "3y") -> Dict:
                 f"(~{span_days} days) available, likely a recent IPO or new "
                 f"listing. Do NOT treat this as long-term performance; judge it as "
                 f"a newly listed security with a short track record."
+            )
+        if result["avg_volume"] < LOW_LIQUIDITY_AVG_VOLUME:
+            result["liquidity_warning"] = (
+                f"LOW LIQUIDITY: average volume is only ~{result['avg_volume']:,} "
+                f"shares/day. Thinly traded securities can have unreliable pricing "
+                f"and wide spreads; treat any return figure with caution."
             )
         return result
     except Exception as e:  # noqa: BLE001

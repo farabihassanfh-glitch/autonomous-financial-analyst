@@ -80,6 +80,16 @@ def main() -> int:
     answer = result["answer"]
     print(answer)
 
+    # --- Guardrail: does the data even support a verdict? -------------------
+    from financial_analyst_agent.verify import assess_verdict_reliability
+
+    reliability = assess_verdict_reliability(result["tool_outputs"])
+    if not reliability["reliable"]:
+        print("\n" + "-" * 70)
+        print("NO RECOMMENDATION SHOWN — data does not support a reliable call:")
+        for b in reliability["blockers"]:
+            print(f"  - {b}")
+
     # --- Guardrail: citation verification ----------------------------------
     if args.verify:
         from financial_analyst_agent.verify import format_badge, verify_citations
@@ -91,11 +101,13 @@ def main() -> int:
     from financial_analyst_agent.backtest import extract_recommendation, log_recommendation
 
     rec = extract_recommendation(answer, ticker_hint=args.ticker)
-    if rec["action"] != "UNKNOWN" and rec["ticker"]:
+    # Don't log a recommendation to the backtest if the data didn't actually
+    # support one — that would silently grade a refusal as if it were a call.
+    if reliability["reliable"] and rec["action"] != "UNKNOWN" and rec["ticker"]:
         log_recommendation(rec["ticker"], rec["action"], args.query,
                            rec["confidence_pct"])
 
-    if args.signoff:
+    if args.signoff and reliability["reliable"]:
         from financial_analyst_agent.approval import request_signoff_cli, requires_signoff
 
         if requires_signoff(answer):

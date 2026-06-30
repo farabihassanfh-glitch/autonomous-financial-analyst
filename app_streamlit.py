@@ -36,7 +36,11 @@ from financial_analyst_agent.backtest import (
     score_recommendations,
 )
 from financial_analyst_agent.config import CHAT_MODEL
-from financial_analyst_agent.verify import extract_data_caveats, verify_citations
+from financial_analyst_agent.verify import (
+    assess_verdict_reliability,
+    extract_data_caveats,
+    verify_citations,
+)
 
 st.set_page_config(page_title="Autonomous Financial Analyst", page_icon="📈",
                    layout="wide")
@@ -123,14 +127,18 @@ with tab_analyze:
         with st.spinner("Agent is researching — calling tools and synthesizing..."):
             result = analyze(query, with_rag=use_rag)
         rec = extract_recommendation(result["answer"], ticker_hint=ticker_hint)
+        reliability = assess_verdict_reliability(result["tool_outputs"])
         verification = (verify_citations(result["answer"], result["tool_outputs"])
                         if use_verify else None)
-        if rec["action"] != "UNKNOWN" and rec["ticker"]:
+        # Don't log a recommendation to the backtest if the data couldn't
+        # actually support one — that would silently grade a refusal as a call.
+        if reliability["reliable"] and rec["action"] != "UNKNOWN" and rec["ticker"]:
             log_recommendation(rec["ticker"], rec["action"], query,
                                rec["confidence_pct"])
         # persist across reruns (so Approve/Reject buttons work)
         st.session_state["result"] = result
         st.session_state["rec"] = rec
+        st.session_state["reliability"] = reliability
         st.session_state["verification"] = verification
         st.session_state.pop("signoff", None)
 
@@ -138,19 +146,31 @@ with tab_analyze:
     if "result" in st.session_state:
         result = st.session_state["result"]
         rec = st.session_state["rec"]
+        reliability = st.session_state.get("reliability", {"reliable": True, "blockers": []})
         verification = st.session_state.get("verification")
 
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Recommendation", rec["action"])
-        conf_display = (f"{rec['confidence_pct']}%" if rec.get("confidence_pct")
-                        else rec.get("confidence_label") or "—")
-        m2.metric("Confidence", conf_display)
+        # Hard override: if the data can't support a verdict, the UI shows that —
+        # regardless of what the model said — so it can't be talked around.
+        if not reliability["reliable"]:
+            m1.metric("Recommendation", "INSUFFICIENT DATA")
+            m2.metric("Confidence", "N/A")
+        else:
+            m1.metric("Recommendation", rec["action"])
+            conf_display = (f"{rec['confidence_pct']}%" if rec.get("confidence_pct")
+                            else rec.get("confidence_label") or "—")
+            m2.metric("Confidence", conf_display)
         m3.metric("Tool calls", len(result["tool_calls"]))
         if verification and verification.get("status") != "error":
             m4.metric("Claims sourced",
                       f"{verification['sourced_claims']}/{verification['total_claims']}")
         else:
             m4.metric("Claims sourced", "—")
+
+        if not reliability["reliable"]:
+            st.error("🚫 **No recommendation is shown.** The data does not support "
+                     "a reliable Buy/Hold/Sell call:\n" +
+                     "\n".join(f"- {b}" for b in reliability["blockers"]))
 
         caveats = extract_data_caveats(result["tool_outputs"])
         if caveats:
@@ -177,8 +197,8 @@ with tab_analyze:
             for tc in result["tool_calls"]:
                 st.write(f"- `{tc['name']}` {tc['args']}")
 
-        # Human-in-the-loop sign-off
-        if require_signoff and requires_signoff(result["answer"]):
+        # Human-in-the-loop sign-off (only meaningful if there's a real verdict)
+        if reliability["reliable"] and require_signoff and requires_signoff(result["answer"]):
             st.divider()
             st.subheader("⚖️ Human sign-off required")
             st.caption(f"Actionable call detected: **{rec['action']} "
