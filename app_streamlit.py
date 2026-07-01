@@ -128,17 +128,23 @@ with tab_analyze:
             result = analyze(query, with_rag=use_rag)
         rec = extract_recommendation(result["answer"], ticker_hint=ticker_hint)
         reliability = assess_verdict_reliability(result["tool_outputs"])
+        # No verdict is shown if EITHER the tools flagged the data as too weak,
+        # OR the model itself explicitly declined to give one (e.g. an asset with
+        # no fundamentals, where the call depends on the user's own risk
+        # tolerance rather than anything the tools could determine).
+        no_verdict = (not reliability["reliable"]) or rec["action"] == "NO RECOMMENDATION"
         verification = (verify_citations(result["answer"], result["tool_outputs"])
                         if use_verify else None)
-        # Don't log a recommendation to the backtest if the data couldn't
-        # actually support one — that would silently grade a refusal as a call.
-        if reliability["reliable"] and rec["action"] != "UNKNOWN" and rec["ticker"]:
+        # Don't log a recommendation to the backtest if there wasn't a real one —
+        # that would silently grade a refusal as if it were an actual call.
+        if not no_verdict and rec["action"] != "UNKNOWN" and rec["ticker"]:
             log_recommendation(rec["ticker"], rec["action"], query,
                                rec["confidence_pct"])
         # persist across reruns (so Approve/Reject buttons work)
         st.session_state["result"] = result
         st.session_state["rec"] = rec
         st.session_state["reliability"] = reliability
+        st.session_state["no_verdict"] = no_verdict
         st.session_state["verification"] = verification
         st.session_state.pop("signoff", None)
 
@@ -147,13 +153,15 @@ with tab_analyze:
         result = st.session_state["result"]
         rec = st.session_state["rec"]
         reliability = st.session_state.get("reliability", {"reliable": True, "blockers": []})
+        no_verdict = st.session_state.get("no_verdict", False)
         verification = st.session_state.get("verification")
 
         m1, m2, m3, m4 = st.columns(4)
-        # Hard override: if the data can't support a verdict, the UI shows that —
-        # regardless of what the model said — so it can't be talked around.
-        if not reliability["reliable"]:
-            m1.metric("Recommendation", "INSUFFICIENT DATA")
+        # Hard override: if there's no real verdict, the UI shows that —
+        # regardless of what a naive keyword scan might have matched — so it
+        # can never contradict the agent's own stated conclusion.
+        if no_verdict:
+            m1.metric("Recommendation", "NO RECOMMENDATION")
             m2.metric("Confidence", "N/A")
         else:
             m1.metric("Recommendation", rec["action"])
@@ -167,10 +175,17 @@ with tab_analyze:
         else:
             m4.metric("Claims sourced", "—")
 
-        if not reliability["reliable"]:
-            st.error("🚫 **No recommendation is shown.** The data does not support "
-                     "a reliable Buy/Hold/Sell call:\n" +
-                     "\n".join(f"- {b}" for b in reliability["blockers"]))
+        if no_verdict:
+            if reliability["blockers"]:
+                st.error("🚫 **No recommendation is shown.** The data does not "
+                         "support a reliable Buy/Hold/Sell call:\n" +
+                         "\n".join(f"- {b}" for b in reliability["blockers"]))
+            else:
+                st.info("ℹ️ **No Buy/Hold/Sell recommendation is shown.** The "
+                        "agent determined this call depends on factors only you "
+                        "can supply (e.g. personal risk tolerance or conviction "
+                        "about an asset with no fundamentals to analyze) — see "
+                        "its reasoning in the briefing below.")
 
         caveats = extract_data_caveats(result["tool_outputs"])
         if caveats:
@@ -198,7 +213,7 @@ with tab_analyze:
                 st.write(f"- `{tc['name']}` {tc['args']}")
 
         # Human-in-the-loop sign-off (only meaningful if there's a real verdict)
-        if reliability["reliable"] and require_signoff and requires_signoff(result["answer"]):
+        if not no_verdict and require_signoff and requires_signoff(result["answer"]):
             st.divider()
             st.subheader("⚖️ Human sign-off required")
             st.caption(f"Actionable call detected: **{rec['action']} "

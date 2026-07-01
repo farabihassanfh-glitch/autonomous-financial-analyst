@@ -25,6 +25,20 @@ _CONF_LABEL_RE = re.compile(
     r"confidence[^A-Za-z]{0,20}(very high|high|medium|moderate|low|very low)",
     re.IGNORECASE,
 )
+# The model explicitly declining to give a verdict. Checked BEFORE the naive
+# action scan below, because a refusal sentence like "I'm not issuing a
+# Buy/Hold/Sell verdict" contains all three action words and would otherwise be
+# misread as an actual BUY/HOLD/SELL call — exactly the bug a user caught on a
+# live IBIT run (badge said BUY while the text explicitly refused to give one).
+_DECLINE_RE = re.compile(
+    r"(not issuing (?:a|any) [\w/\s]{0,30}?(?:recommendation|verdict)|"
+    r"no (?:buy|hold|sell) recommendation|"
+    r"insufficient data for a recommendation|"
+    r"cannot (?:responsibly )?(?:give|issue|provide|make) a (?:recommendation|verdict)|"
+    r"i don'?t have enough (?:data|information) (?:to|for)|"
+    r"depends (?:almost )?entirely on your)",
+    re.IGNORECASE,
+)
 
 
 def extract_recommendation(answer: str, ticker_hint: str | None = None) -> dict:
@@ -32,7 +46,12 @@ def extract_recommendation(answer: str, ticker_hint: str | None = None) -> dict:
 
     confidence_pct is the numeric percent if the briefing gave one; confidence_label
     is a word like "Low"/"Moderate" when it gave a qualitative level instead.
+    Returns action="NO RECOMMENDATION" if the model explicitly declined to give
+    one — checked before, and takes priority over, the raw keyword scan.
     """
+    if _DECLINE_RE.search(answer):
+        return {"action": "NO RECOMMENDATION", "confidence_pct": None,
+                "confidence_label": None, "ticker": ticker_hint}
     action_match = _ACTION_RE.search(answer)
     pct_match = _CONF_PCT_RE.search(answer)
     label_match = _CONF_LABEL_RE.search(answer)

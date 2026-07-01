@@ -101,13 +101,18 @@ def main() -> int:
     from financial_analyst_agent.backtest import extract_recommendation, log_recommendation
 
     rec = extract_recommendation(answer, ticker_hint=args.ticker)
-    # Don't log a recommendation to the backtest if the data didn't actually
-    # support one — that would silently grade a refusal as if it were a call.
-    if reliability["reliable"] and rec["action"] != "UNKNOWN" and rec["ticker"]:
+    no_verdict = (not reliability["reliable"]) or rec["action"] == "NO RECOMMENDATION"
+    if no_verdict and rec["action"] == "NO RECOMMENDATION" and reliability["reliable"]:
+        print("\n" + "-" * 70)
+        print("NO RECOMMENDATION — the agent explicitly declined to give one "
+              "(see its reasoning above).")
+    # Don't log a recommendation to the backtest if there wasn't a real one —
+    # that would silently grade a refusal as if it were an actual call.
+    if not no_verdict and rec["action"] != "UNKNOWN" and rec["ticker"]:
         log_recommendation(rec["ticker"], rec["action"], args.query,
                            rec["confidence_pct"])
 
-    if args.signoff and reliability["reliable"]:
+    if args.signoff and not no_verdict:
         from financial_analyst_agent.approval import request_signoff_cli, requires_signoff
 
         if requires_signoff(answer):
